@@ -272,11 +272,11 @@ class Player(Sprite):
                 break
             elif event.type == pygame.KEYDOWN:
             
-                if event.key == pygame.K_DOWN:
+                if event.key == pygame.K_DOWN or event.key == pygame.K_SPACE:
                     self.playerDown=True
                 else:
                     self.playerDown=False
-                if event.key == pygame.K_ESCAPE:
+                if event.key == pygame.K_ESCAPE
                     done=True
                     break
                 if ((event.key == pygame.K_UP or event.key == pygame.K_w) or event.key == pygame.K_SPACE):

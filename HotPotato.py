@@ -2,12 +2,14 @@ import pygame
 from os import path
 import math
 import os
-
+import itertools
 import ctypes
+import random
+
 ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(' ')
 
 FPS=60
-DIALATION = 60/FPS
+TIME_DIALATION = 60/FPS
 
 # Default Resolution
 DEFAULT_screen_x=1920
@@ -23,6 +25,24 @@ def get_image(name):
     Path=os.getcwd() + ASSETS_PATH + name
     return (pygame.image.load(Path))
 
+
+def makeSheet(sheet, width, height):
+    
+    totalWidth, totalHeight = sheet.get_size()
+    column=int(totalWidth/width)
+    row=int(totalHeight/height)
+    x=0
+    y=0
+    images=[]
+    for j in range(row):
+        for i in range(column):
+            rect = pygame.Rect( x+i*width,y+j*height,width,height )
+            image = pygame.Surface(rect.size)
+            image.blit(sheet,(0,0),rect)
+            image.set_colorkey(0, pygame.RLEACCEL)
+            images.append(image)
+    return images
+    
 try:
     icon=get_image("icon.ico")
 except:
@@ -37,19 +57,19 @@ pygame.display.set_caption('Hot Potato')
 class Platform():
     height=3
     numPieces=14
-    speed=.4*DIALATION
+    speed=.4*TIME_DIALATION
     def __init__(self,startingLocation,ID):
         self.ID=ID
         self.y=startingLocation
         #Width of each piece, ensuring there is extra room on each end
         self.pieceWidth = screen_x / (self.numPieces+2)
-
+        
+        self.border=2
         self.pieces = []
         for i in range(self.numPieces):
-            self.pieces.append(Piece(self.pieceWidth, self.height, (i+1)*self.pieceWidth+2*i-self.numPieces, self.y, i))
+            self.pieces.append(Piece(self.pieceWidth, self.height, (i+1)*self.pieceWidth+self.border*i-self.numPieces, self.y, i))
 
     def update(self):
-        #print("Platform y:" + str(int(self.y)))
         self.y += self.speed
         #Looping platform back to top
         if self.y > screen_y:
@@ -58,15 +78,27 @@ class Platform():
         #Updating the pieces
         for piece in self.pieces[:]:
             if piece.health <= 0:
+                
+                for sprite in sprites:
+                    if sprite.onGround and sprite.futureRect.colliderect(piece.rect):
+                            # check for if this other sprite is on any other piece that would keep it from falling that isn't set to be destroyed as well
+                            for otherPiece in self.pieces:
+                                    if (sprite.futureRect.colliderect(otherPiece.rect) and otherPiece != piece) and otherPiece.health > 0:
+                                        break
+                            else:
+                                sprite.onGround=False
+                if piece.fire != None:
+                    fires.remove(piece.fire)                
                 self.pieces.remove(piece)
+                
             else:
                 piece.update(self.y)
-   #     for piece in self.pieces:
-    #        piece.update(self.y)
+
 
 class Piece():
     maxHealth=3
     hit=False
+    fire=None
     def __init__(self,width,height,x,y,ID):
         self.ID=ID
         self.width=width
@@ -104,6 +136,23 @@ class Sprite():
     movement=0
     playerDown=False
     bottomSurfHeight=4
+    pieceDamage=1
+    persistent=True
+    def __init__(self,x,y):
+        global sprites
+        sprites.append(self)
+        self.x,self.y=x,y
+        
+        self.TERMINAL_VELOCITY = terminalVelocityCalc(self.height,self.width,self.GRAVITY_ACCELERATION)
+        print("Terminal Velocity: ",self.TERMINAL_VELOCITY)
+        self.bottomSurf = pygame.Surface((int(self.width),4), pygame.SRCALPHA)
+        self.futureSurfHeight=self.TERMINAL_VELOCITY+Platform.height
+        self.futureSurf = pygame.Surface((int(self.width),int(self.futureSurfHeight)), pygame.SRCALPHA)
+        try:
+            self.secondInit()
+        except AttributeError:
+            pass
+            
     def Move(self):
         if self.onGround:
         #if on ground, move at same speed downwards as platforms to stay on them
@@ -119,20 +168,16 @@ class Sprite():
                 self.velocity = -1 * self.TERMINAL_VELOCITY
             
             self.y -= self.velocity
-            
-
-
     
     def mainUpdate(self):
-        self.bottomRect = screen.blit(self.bottomSurf, (int(self.x),int(self.height+self.y+-self.TERMINAL_VELOCITY)))
+        self.bottomRect = screen.blit(self.bottomSurf, (int(self.x),int(self.height+self.y-2)))
         if debugger:
-            
             self.futureSurf.fill((0,255,0))
             self.bottomSurf.fill((0,0,255))
         if self.onGround:
             self.futureRect = screen.blit(self.futureSurf, (int(self.x),int(self.y+self.height ) ) )
         else:
-            self.futureRect = screen.blit(self.futureSurf, (int(self.x+self.movement),int(self.y - (self.velocity + self.GRAVITY_ACCELERATION) + self.height ) ) )
+            self.futureRect = screen.blit(self.futureSurf, (int(self.x+self.movement),int(self.y - self.velocity - self.futureSurfHeight + self.GRAVITY_ACCELERATION + self.height ) ) )
         
         if self.model != None:
             self.blit = screen.blit(self.model,(int(self.x),int(self.y)))
@@ -147,21 +192,10 @@ class Spring(Sprite):
     height=20
     springing=0
     sprang=60
-    def __init__(self,x,y):
+    def secondInit(self):
         global springs
-        global sprites
-        
-        sprites.append(self)
         springs.append(self)
         self.DEFAULT_height=self.height
-        
-        self.TERMINAL_VELOCITY = terminalVelocityCalc(self.height,self.width,self.GRAVITY_ACCELERATION)
-        print("Terminal Velocity: ",self.TERMINAL_VELOCITY)
-        self.bottomSurf = pygame.Surface((int(self.width),int(self.TERMINAL_VELOCITY+Platform.height)), pygame.SRCALPHA)
-        self.futureSurf = pygame.Surface((int(self.width),int(self.TERMINAL_VELOCITY+Platform.height)), pygame.SRCALPHA)
-
-        self.x=x
-        self.y=y
 
     def update(self):
         #make this a trapezoid ideally, right now its just two triangles
@@ -173,28 +207,210 @@ class Spring(Sprite):
             self.springing -= 1
             self.y += self.DEFAULT_height/self.sprang
             self.height -= self.DEFAULT_height/self.sprang
-        elif self.height != self.DEFAULT_height:
+        if self.height != self.DEFAULT_height and self.springing == 0:
             self.height = self.DEFAULT_height
             self.y -= self.DEFAULT_height
             
         self.mainUpdate()
 
-class Dragon(Sprite):
-    model = get_image("biggererDragon.png")
+class Dragon():
+    model = get_image("dragon.png")
+    #sheet dimensions
     width, height = model.get_size()
-    def __init__(self,x,y):
-        self.x, self.y=x,y
+    width*=2
+    height*=2
+    model=pygame.transform.scale(model, (int(width), int(height)))
+
+    origWidth, origHeight = width, height
+    #individual sprite dimensions
+    smallWidth, smallHeight = 191*2, 161*2
+    
+    direction=1
+    animations=[]
+    
+    timerMax=int(16*TIME_DIALATION)
+    timer=timerMax-1
+    breathFire=True
+    def __init__(self):
+    
+        #setting width/height to sprite dimensions 
+        self.width = int(self.width/self.origWidth * self.smallWidth)
+        self.height = int(self.height/self.origHeight * self.smallHeight)
+        self.sheet=makeSheet(self.model,self.width,self.height)
         
+        self.upIter=itertools.cycle(self.sheet[0:3])
+        self.rightIter=itertools.cycle(self.sheet[3:6])
+        self.downIter=itertools.cycle(self.sheet[6:9])
+        self.leftIter=itertools.cycle(self.sheet[9:12])
+
+        self.animations=[self.upIter,self.rightIter,self.downIter,self.leftIter]
+        
+        self.x=-1 * self.width
+        self.y=-40
+
     def update(self):
+        if self.x < int((screen_x-self.width)/2):
+            self.x+=3
+            if self.x >= screen_x:
+                boss=None
+        else:
+            if self.breathFire:
+                self.direction = 2
+                self.fireball=Fireball(self.x + self.width/2,self.y + self.height/2)
+                self.breathFire=False
+            if self.fireball not in sprites:
+                self.x+=3
+                self.direction=1
+            
+        
+        self.timer+=1
+        if self.timer == self.timerMax:
+            self.timer=0
+            self.model=next(self.animations[self.direction])
+        self.blit = screen.blit(self.model,(int(self.x),int(self.y)))
+
+class Fireball(Sprite):
+    model = get_image("fireball.png")
+    width, height = model.get_size()
+    width*=.8
+    height*=.8
+    model=pygame.transform.scale(model, (int(width), int(height)))
+
+    origWidth, origHeight = width, height
+    smallWidth, smallHeight = (width/6), (height/4)
+    
+    timerMax=(int(12*TIME_DIALATION))
+    timer=timerMax-1
+    LATERAL_SPEED = 8
+    persistent=False
+    pieceThrough=False
+    pieceDamage=3
+    def secondInit(self):
+        self.width = int(self.width/self.origWidth * self.smallWidth)
+        self.height = int(self.height/self.origHeight * self.smallHeight)
+        self.sheet=makeSheet(self.model,self.width,self.height)
+        self.animation=itertools.cycle(self.sheet)
+        
+        self.direction=random.choice([-1,1])
+        self.LATERAL_SPEED *= self.direction
+        
+        self.TERMINAL_VELOCITY = terminalVelocityCalc(self.height,self.width,self.GRAVITY_ACCELERATION)
+        print("Terminal Velocity: ",self.TERMINAL_VELOCITY)
+        self.bottomSurf = pygame.Surface((int(self.width),4), pygame.SRCALPHA)
+        self.futureSurfHeight=self.TERMINAL_VELOCITY+Platform.height
+        self.futureSurf = pygame.Surface((int(self.width),int(self.futureSurfHeight)), pygame.SRCALPHA)
+        
+    def pieceInteraction(self,piece,platform):
+        if not platform.pieces[piece].fire:
+            fires.append( Fire(platform,piece) )
+            if self.pieceThrough:
+                self.pieceDamage=0
+            else:
+                self.pieceThrough=True
+
+    def update(self):
+        self.Move()
+        if self.onGround:
+            self.LATERAL_SPEED=0
+        
+        self.x += int(self.LATERAL_SPEED)
+        if self.LATERAL_SPEED > 0:
+            self.LATERAL_SPEED -= self.GRAVITY_ACCELERATION / 2
+        elif self.LATERAL_SPEED < 0:
+            self.LATERAL_SPEED += self.GRAVITY_ACCELERATION / 2
+        
+        self.timer+=1
+        if self.timer == self.timerMax:
+            self.timer=0
+            self.model=next(self.animation)
         self.mainUpdate()
 
-class Fire(Sprite):
-    #model = None #for now
-    #width, height = model.get_size()
-    def __init__(self,x,y):
-        self.x=x
-        self.y=y
+class Fire():
+    model = get_image('fire.png')
+    width, height = model.get_size()
+    width/=2
+    height/=2
+    model=pygame.transform.scale(model, (int(width), int(height)))
+
+    origWidth, origHeight = width, height
+    smallWidth, smallHeight = int(130/2), int(151/2)
     
+    timerMax=int(18*TIME_DIALATION)
+    timer=timerMax-1
+    decay=0
+    grow=0
+    direction=0
+    def __init__(self,platform,location):
+        self.piece = platform.pieces[location]
+        self.piece.fire=self
+        self.location=location
+        self.platform=platform
+        self.width = int(self.width/self.origWidth * self.smallWidth)
+        self.height = int(self.height/self.origHeight * self.smallHeight)
+       
+        self.x = self.piece.x + (self.piece.width - self.width)/2
+        self.y = self.piece.y - self.height
+        
+        self.animations=[itertools.cycle(makeSheet(self.model,self.width,self.height))]
+        
+        if random.random() < 0.5:  
+            next(self.animations[0])
+    def update(self):
+
+        self.location=self.platform.pieces.index(self.piece)
+        global fires
+        self.timer+=1
+        if self.timer == self.timerMax:
+            self.timer=0
+
+            if self.grow == 2:
+                self.grow=0
+                dontMove=[]
+
+                # if fire is at end of platform, don't spread there
+                if (self.platform.pieces.index(self.piece) == len(self.platform.pieces) - 1):
+                    dontMove.append(1)
+                # if fire is at beginning of platform, don't move there
+                elif self.platform.pieces.index(self.piece) == 0:
+                    dontMove.append(-1)
+
+                # if there is already a fire at ahead or behind, don't spread there
+                for fire in fires:
+                    if fire.platform == self.platform:
+                        if fire.location + 1 == self.location:
+                            dontMove.append(-1)
+                        elif fire.location -1 == self.location:
+                            dontMove.append(1)
+                # only spread on pieces that are adjacent to current piece            
+                if self.platform.pieces[self.location+1].x - self.platform.border != self.piece.x+self.piece.width:
+                        dontMove.append(1)
+                if self.platform.pieces[self.location-1].x + self.platform.pieces[self.location-1].width + self.platform.border != self.piece.x:
+                        dontMove.append(-1)
+
+                if 1 in dontMove and -1 in dontMove:
+                    move=0
+                elif 1 in dontMove:
+                    move=-1
+                elif -1 in dontMove:
+                    move=1
+                else:
+                    move=random.choice([-1,1])
+                
+                if move != 0:
+                    fires.append(Fire(self.platform,move+self.location) )
+
+            if self.decay == 8:
+                self.decay=0
+                self.grow+=1
+                self.piece.health-=1
+                if self.piece.health == 0:
+                    return
+            self.decay+=1
+
+            self.model=next(self.animations[self.direction])
+        self.y = self.piece.y - self.height
+        self.blit = screen.blit(self.model,(int(self.x),int(self.y)))
+
 def jumpHeight(height,gravity):
   # t = time j = initialJumpVelocity h = jumpHeight g = gravityAccelerationConstant
   #  h=t(j-tg/2)
@@ -222,17 +438,11 @@ class Player(Sprite):
     lateral=0
     movement=0
     jumps=0
-    def __init__(self,x,y):
-        global sprites
-        sprites.append(self)
-        self.x,self.y=x,y
-        
-        self.TERMINAL_VELOCITY = terminalVelocityCalc(self.height,self.width,self.GRAVITY_ACCELERATION)
-        print("Terminal Velocity: ",self.TERMINAL_VELOCITY)
-        self.bottomSurf = pygame.Surface((int(self.width),int(self.TERMINAL_VELOCITY+Platform.height)), pygame.SRCALPHA)
-        self.futureSurf = pygame.Surface((int(self.width),int(self.TERMINAL_VELOCITY+Platform.height)), pygame.SRCALPHA)
+    persistent=False
+    def secondInit(self):
+    
         self.jumpVelocity=int(jumpHeight(self.height*2,self.GRAVITY_ACCELERATION))
-
+        
     def update(self):
         
         self.Move()
@@ -272,11 +482,11 @@ class Player(Sprite):
                 break
             elif event.type == pygame.KEYDOWN:
             
-                if event.key == pygame.K_DOWN or event.key == pygame.K_SPACE:
+                if event.key == pygame.K_DOWN or event.key == pygame.K_s:
                     self.playerDown=True
                 else:
                     self.playerDown=False
-                if event.key == pygame.K_ESCAPE
+                if event.key == pygame.K_ESCAPE:
                     done=True
                     break
                 if ((event.key == pygame.K_UP or event.key == pygame.K_w) or event.key == pygame.K_SPACE):
@@ -298,12 +508,18 @@ def main():
     global platforms
     global debugger
     global DIALATION
+    global TIME_DIALATION
     global springs
     global sprites
+    global fires
+    global boss
     
     springs=[]
     sprites=[]
     platforms=[]
+    fires=[]
+    boss=None
+    
     #Given number of platforms, setting equal distance between each one
     numPlatforms=5
     distBetweenPlatforms = screen_y / numPlatforms
@@ -320,15 +536,18 @@ def main():
 
     #Adjusting sprite constants to resolution size and fps
     #Dialation is set to fps/60 (ideal 60 fps) * current resolution / default resolution
-    spriteClasses=[Spring,Player,Dragon]
-    resolutionRatio=screen_x/DEFAULT_screen_x
-    DIALATION*=resolutionRatio
-    for sprite in spriteClasses:
     
-        sprite.LATERAL_SPEED *= DIALATION
-        sprite.GRAVITY_ACCELERATION *= DIALATION
-        sprite.TERMINAL_VELOCITY *= DIALATION
-        
+    spriteClasses=[Spring,Player,Dragon,Fire,Fireball]
+    
+    resolutionRatio=screen_x/DEFAULT_screen_x
+    DIALATION=resolutionRatio*TIME_DIALATION
+    for sprite in spriteClasses:
+        try:
+            sprite.LATERAL_SPEED *= DIALATION
+            sprite.GRAVITY_ACCELERATION *= DIALATION
+            sprite.TERMINAL_VELOCITY *= DIALATION
+        except AttributeError:
+            pass
         sprite.width = sprite.width * resolutionRatio
         sprite.height = sprite.height * resolutionRatio
         
@@ -347,40 +566,42 @@ def main():
     # Font is default with None, size 24
     font = pygame.font.Font(None, 24)
     
-    #initial categorization of sprites into their corresponding list because i can't be bothered
-   # for sprite in sprites:
-    #    if isinstance(sprite, Spring) and sprite not in springs:
-    #        springs.append(sprite)
-    
     ##########################
     #Main frame by frame loop#
     ##########################
     done=False
-    dragon=Dragon((screen_x-Dragon.width)/2,-20)
-    temp=0
+    boss=Dragon()
+   # fires.append(Fire(platforms[0],2))
+   # fireball=Fireball(200,20)
     while not done:
 
         screen.fill((20,20,0))
 
         if debugger:
-            text = font.render("Vertical Velocity:" + str(int(player.velocity)) + " player.jumps: " + str(player.jumps) + " Player on Ground?:" + str(player.onGround), True, (0, 128, 0))
+            text = font.render("Vertical Velocity:" + str(int(player.velocity)) + " Player on Ground?:" + str(player.onGround) + " fps: " + str(int(clock.get_fps())), True, (0, 128, 0))
             screen.blit(text,(0,0))
-        
+
         for platform in platforms:
             platform.update()
+        for fire in fires:
+            fire.update()
 
         # every keypress or event per frame, used for lateral movement
         events = pygame.event.get()       
         # every change in keypress status, used for jumping
         pressed = pygame.key.get_pressed()              
-
         player.user_input(events,pressed)
+
+        if boss != None:
+            boss.update()
+
         for sprite in sprites:
             sprite.justFallen=False
             sprite.update()
+
         # testing if springs should activate on player, propelling them upwards
         for spring in springs:
-            if spring.blit.colliderect(player.bottomRect):
+            if spring.blit.colliderect(player.bottomRect) and spring.springing == 0:
                 spring.springing=spring.sprang
                 player.velocity = player.jumpVelocity*spring.jumpMult
                 if player.onGround:
@@ -390,19 +611,20 @@ def main():
 
             # if sprite goes off screen, put it back to the top like a platform. Player isn't so fortunate
             if sprite.y > screen_y:
-                if not sprite.isPlayer:
+                if sprite.persistent:
                     sprite.y = 0
                 else:
                     sprites.remove(sprite)
-                    print("Player fell off the screen!")
-                    done=True
-                    break
+                    if sprite.isPlayer:
+                        print("Player fell off the screen!")
+                        done=True
+                        break
             # turn x around if off screen
             if sprite.x > screen_x:
                 sprite.x=0
             elif sprite.x <= 0:
                 sprite.x=screen_x
-            
+
             # checking whether sprite should be on ground when it isn't
             if not (sprite.onGround or sprite.justFallen) and sprite.velocity <= 0:
             # If fast enough for bottomRect to pass straight through piece and it didn't detect something 
@@ -411,7 +633,7 @@ def main():
                     sprite.tempRect = sprite.futureRect
                 else:
                     sprite.tempRect = sprite.bottomRect
-                    
+
                 for platform in platforms:
                     for piece in platform.pieces:
                         # if piece was told by futureRect to be hit, reset future variables and put sprite on piece
@@ -421,7 +643,7 @@ def main():
                             sprite.willBeOnGround=False
                             sprite.futurePieces.remove(piece.ID)
 
-                        # if there is a collision while falling
+                        # if there is a collision while falling and there aren't any collisions being handled this frame
                         elif sprite.tempRect.colliderect(piece.rect):
                             # if futureRect is handling collisions, set future variables for next frame's collision
                             if sprite.tempRect == sprite.futureRect:
@@ -433,10 +655,16 @@ def main():
                                 piece.hit=True
 
                         if piece.hit:
-                            piece.health-=1
+                            if piece.fire != None and not isinstance(sprite, Fireball):
+                                fires.remove(piece.fire)
+                                piece.fire = None
+                            if callable(getattr(sprite, "pieceInteraction", None)):
+                                sprite.pieceInteraction(platform.pieces.index(piece),platform)
+
+                            piece.health-=sprite.pieceDamage
                             piece.hit=False
                             # If piece won't break, put player on ground 
-                            if piece.health != 0:
+                            if piece.health > 0:
                                 print("<" + str(sprite).split(".")[1] + ' Just hit ' + str(piece).split(".")[1])
                                 sprite.onGround=True
                                 sprite.velocity=0
@@ -444,24 +672,24 @@ def main():
                             # else if piece will break, say it and test if any other sprites should fall
                             else:
                                 print(str(sprite).split(".")[1] + " Just broke ",str(piece).split(".")[1])
-                                for otherSprite in sprites:
-                                    # test only for sprites besides the current one, and ones that are already falling
-                                    if otherSprite is not sprite and otherSprite.onGround:
-                                        if otherSprite.futureRect.colliderect(piece.rect) or int(otherSprite.y+otherSprite.height) == int(platform.y):
-                                            print("And that sprite is on at least one of the pieces that just broke!")
-                                            # check for if this other sprite is on any other piece that would keep it from falling that isn't set to be destroyed as well
-                                            for otherPiece in platform.pieces:
-                                                if (otherSprite.futureRect.colliderect(otherPiece.rect) and otherPiece != piece) and not (otherPiece.hit and otherPiece.health == 1):
-                                                    print("its got another piece to stick to though, so it isn't falling")
-                                                    break
-                                            else:
-                                                print(str(otherSprite).split(".")[1] + " is also falling!")
-                                                otherSprite.onGround=False
-                                                otherSprite.justFallen=True
+                       #         for otherSprite in sprites:
+                        #            # test only for sprites besides the current one, and ones that are already falling
+                        #            if otherSprite is not sprite and otherSprite.onGround:
+                        #                if otherSprite.futureRect.colliderect(piece.rect):
+                        #                    print("another sprite is on at least one of the pieces that just broke!")
+                        #                    # check for if this other sprite is on any other piece that would keep it from falling that isn't set to be destroyed as well
+                         #                   for otherPiece in platform.pieces:
+                        #                            if (otherSprite.futureRect.colliderect(otherPiece.rect) and otherPiece != piece) and ( (otherPiece.hit or otherPiece.ID in sprite.futurePieces) and otherPiece.health <= sprite.pieceDamage):
+                         #                               print("its got another piece to stick to though, so it isn't falling")
+                         #                               break
+                         #                   else:
+                         #                       print(str(otherSprite).split(".")[1] + " is also falling!")
+                          #                      otherSprite.onGround=False
+                         #                       otherSprite.justFallen=True
 
                     if sprite.futurePieces == []:
                         sprite.futurePlatform=None
-        dragon.blit=screen.blit(dragon.model,(int(dragon.x),int(dragon.y)))
+
         pygame.display.flip()
         clock.tick(FPS)
 

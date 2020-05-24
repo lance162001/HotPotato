@@ -19,8 +19,7 @@ def run():
     
 master = Tk()
 master.title("Menu")
-master.geometry("200x175")
-
+master.geometry("550x190")
 
 try:
     master.iconbitmap('assets\\icon.ico')
@@ -29,10 +28,15 @@ except:
 
 
 #Title
-l = Label(master, text="Hot Potato", font=("Helvetica",16), pady=15)
+l = Label(master, text="Hot Potato", font=("Helvetica",24), pady=5)
 l.pack()
 
+l2 = Label(master, text="WASD or Arrow Keys to move, don't fall off the screen!", font=("Helvetica",14),pady=0)
+l2.pack() 
+
+
 resolution = StringVar(master)
+
 resolution.set("Resolution") # default value
 
 #Resolution Dropdown
@@ -52,3 +56,13 @@ d.pack()
 #Play Button
 b = Button(master, text="Play", padx=10, command=run, bg = "#fe8761", fg = "#fff", activebackground="#af460f")
 b.pack()
+
+defs = open("defaults.txt", "r").read().split("\n")
+resolution.set(defs[0].split("=")[1])
+if defs[1].split("=")[1] == "True":
+    c.select()
+if defs[2].split("=")[1] == "True":
+    d.select()
+
+
+

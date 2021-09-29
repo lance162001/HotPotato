@@ -22,9 +22,11 @@ master.title("Menu")
 master.geometry("550x190")
 
 try:
-    master.iconbitmap('assets\\icon.ico')
+    master.iconbitmap('Assets\\icon.ico')
 except:
-    master.iconbitmap('Assets/icon.ico')
+    icon = PhotoImage(master=master, file='Assets/icon.png')
+    master.wm_iconphoto(True,icon)
+  #  master.iconbitmap('Assets/icon.png')
 
 
 #Title

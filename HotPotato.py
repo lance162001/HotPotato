@@ -6,7 +6,10 @@ import itertools
 import ctypes
 import random
 
-ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(' ')
+try:
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(' ')
+except:
+   print("not windows!")
 
 FPS=60
 TIME_DIALATION = 60/FPS
@@ -46,7 +49,8 @@ def makeSheet(sheet, width, height):
 try:
     icon=get_image("icon.ico")
 except:
-    ASSETS_PATH = "/assets/"
+    ASSETS_PATH = "/Assets/"
+    icon=get_image("icon.png")
     print("Unix file structure detected!")
 else:
     print("Windows file structure detected!")
